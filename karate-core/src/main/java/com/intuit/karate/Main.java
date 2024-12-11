@@ -129,6 +129,12 @@ public class Main implements Callable<Void> {
     @Option(names = {"-H", "--hook"}, split = ",", description = "class name of a RuntimeHook (or RuntimeHookFactory) to add")
     List<String> hookFactoryClassNames;
 
+    @Option(names = {"-G", "--json-filepath"}, description = "path of json files")
+    String jsonFilePath;
+
+    @Option(names = {"-F", "--class-filepath"}, description = "path of class files")
+    String classFilePath;
+
     //==========================================================================
     //
     public void addPath(String path) {
@@ -319,6 +325,26 @@ public class Main implements Callable<Void> {
         if (debugPort != -1) {
             startDebugServer(new String[]{debugPort + ""});
             return null;
+        }
+        if (jsonFilePath != null) {
+            // generate report using the jsonFilePath.
+            Runner.Builder builder = new Runner.Builder();
+            builder.reportDir(jsonFilePath);
+            File file = new File(classFilePath);
+            builder.workingDir(file);
+            Suite suite = new Suite(builder);
+            File folder = new File(jsonFilePath);
+            for (File ff : folder.listFiles()) {
+                if(ff.toString().endsWith(".txt")) {
+                    suite.featureResultFiles.add(ff);
+                }
+            }
+
+            Results results = Results.of(suite);
+            suite.getFeatureResults().forEach(featureResult -> suite.suiteReports.featureReport(suite, featureResult).render());
+
+            logger.info("results data: {}",results);
+
         }
         if (paths != null) {
             Results results = Runner
