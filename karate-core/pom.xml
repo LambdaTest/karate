@@ -13,7 +13,24 @@
     <properties>
         <antlr.version>4.13.1</antlr.version>
         <graal.version>24.0.0</graal.version>
+        <!-- Pin Netty (pulled transitively via Armeria) to a patched release on the
+             4.1 line to fix CVE-2026-44249/44893/45416/45673/45674/47244/47691/48043/
+             48059/50010/50020/50560. Armeria 1.29.2 targets Netty 4.1.x, so this stays
+             on the supported line rather than forcing a 4.2 jump. -->
+        <netty.version>4.1.135.Final</netty.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-bom</artifactId>
+                <version>${netty.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
