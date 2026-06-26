@@ -7,9 +7,6 @@ name: lt-reports-ci
 # on PRs before they reach the publish-on-merge workflow.
 
 on:
-  push:
-    branches:
-      - lt-reports
   pull_request:
     branches:
       - lt-reports
