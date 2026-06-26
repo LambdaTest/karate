@@ -1,0 +1,86 @@
+name: lt-reports-cd
+
+# Publishes the Karate report-integration fatjar to GitHub Packages on every
+# merge into lt-reports. The post-processing service (LambdatestIncPrivate/
+# hyperexecute-postprocessing-service) downloads it from a fixed coordinate at
+# Docker build time, so there is nothing to version-bump or rename by hand:
+# every merge overwrites the same coordinate, mirroring how the extent report
+# jar is published (extentnativereports-1.10-stage).
+#
+#   coordinate: com.lambdatest:karate-reports:lt-reports
+#   url:        https://maven.pkg.github.com/LambdaTest/karate/com/lambdatest/karate-reports/lt-reports/karate-reports-lt-reports.jar
+
+on:
+  push:
+    branches:
+      - lt-reports
+  workflow_dispatch: {}
+
+jobs:
+  publish:
+    name: Build and publish karate report fatjar
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: git checkout
+        uses: actions/checkout@v4
+
+      - name: set up jdk 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: cache maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      # Build the karate-core fatjar (shaded karate-<version>.jar bundling
+      # com.intuit.karate.Main). IMPORTANT: only the `fatjar` profile is active.
+      # Activating `pre-release` alongside it merges the two profiles' shade
+      # executions (both use the default execution id) into an invalid config:
+      #   maven-shade-plugin: Cannot find 'resource' in class ServicesResourceTransformer
+      # build-docker.sh keeps the two profiles in separate invocations for the
+      # same reason. `-pl karate-core -am` builds only karate-core and its parent.
+      - name: build karate-core fatjar
+        run: |
+          mvn -B -ntp clean package -DskipTests \
+            -P fatjar \
+            -pl karate-core -am
+
+      - name: verify fatjar
+        run: |
+          KARATE_VERSION="$(mvn -q -DforceStdout -f karate-core/pom.xml help:evaluate -Dexpression=project.version)"
+          echo "Built karate-core version: ${KARATE_VERSION}"
+          FATJAR="karate-core/target/karate-${KARATE_VERSION}.jar"
+          test -f "${FATJAR}" || { echo "fatjar not found at ${FATJAR}"; ls -lh karate-core/target; exit 1; }
+          ls -lh "${FATJAR}"
+
+      # Deploy the fatjar to GitHub Packages under a fixed coordinate. deploy-file
+      # is used (instead of a plain deploy) so the karate-parent release version
+      # (1.5.x, used for Maven Central) is never touched. Only runs on lt-reports
+      # (not workflow_dispatch from other branches) so the package is published
+      # solely from merges into lt-reports.
+      - name: publish to GitHub Packages
+        if: github.ref == 'refs/heads/lt-reports'
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          KARATE_VERSION="$(mvn -q -DforceStdout -f karate-core/pom.xml help:evaluate -Dexpression=project.version)"
+          FATJAR="karate-core/target/karate-${KARATE_VERSION}.jar"
+          mvn -B -ntp deploy:deploy-file \
+            --settings .github/settings.xml \
+            -Dfile="${FATJAR}" \
+            -DgroupId=com.lambdatest \
+            -DartifactId=karate-reports \
+            -Dversion=lt-reports \
+            -Dpackaging=jar \
+            -DrepositoryId=github \
+            -Durl=https://maven.pkg.github.com/LambdaTest/karate
