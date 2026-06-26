@@ -1,0 +1,61 @@
+name: lt-reports-ci
+
+# Verifies that the Karate report-integration fatjar builds successfully.
+# This mirrors lt-reports-cd.yml's build (same JDK, cache, profile and
+# verify steps) but stops short of publishing: it only proves the fatjar
+# compiles and is produced, so build breakages on lt-reports are caught
+# on PRs before they reach the publish-on-merge workflow.
+
+on:
+  push:
+    branches:
+      - lt-reports
+  pull_request:
+    branches:
+      - lt-reports
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    name: Build karate report fatjar
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: git checkout
+        uses: actions/checkout@v4
+
+      - name: set up jdk 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: cache maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      # Build the karate-core fatjar (shaded karate-<version>.jar bundling
+      # com.intuit.karate.Main). IMPORTANT: only the `fatjar` profile is active.
+      # Activating `pre-release` alongside it merges the two profiles' shade
+      # executions (both use the default execution id) into an invalid config:
+      #   maven-shade-plugin: Cannot find 'resource' in class ServicesResourceTransformer
+      # build-docker.sh keeps the two profiles in separate invocations for the
+      # same reason. `-pl karate-core -am` builds only karate-core and its parent.
+      - name: build karate-core fatjar
+        run: |
+          mvn -B -ntp clean package -DskipTests \
+            -P fatjar \
+            -pl karate-core -am
+
+      - name: verify fatjar
+        run: |
+          KARATE_VERSION="$(mvn -q -DforceStdout -f karate-core/pom.xml help:evaluate -Dexpression=project.version)"
+          echo "Built karate-core version: ${KARATE_VERSION}"
+          FATJAR="karate-core/target/karate-${KARATE_VERSION}.jar"
+          test -f "${FATJAR}" || { echo "fatjar not found at ${FATJAR}"; ls -lh karate-core/target; exit 1; }
+          ls -lh "${FATJAR}"
