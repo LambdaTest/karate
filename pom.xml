@@ -32,16 +32,9 @@
     </developers>       
 
     <properties>
-        <!--
-          LambdaTest fork patch version. The karate-parent <version> above tracks
-          upstream (karatelabs/karate) unchanged; this is a SEPARATE counter for
-          LambdaTest's report-fork changes. It is NOT appended to project.version
-          (which would dirty the Maven Central release coordinate). Instead the
-          lt-reports-cd workflow combines them into the GitHub Packages publish
-          version: ${project.version}.${lt.patch.version} (e.g. 1.5.3.1).
-          BUMP THIS by 1 on every change that needs a republish — GitHub Packages
-          rejects re-publishing an existing version (HTTP 409 Conflict).
-        -->
+        <!-- LambdaTest fork patch counter, kept separate from the upstream-tracking
+             <version> above. lt-reports-cd publishes ${project.version}.${lt.patch.version};
+             bump this on every change that needs a republish. -->
         <lt.patch.version>1</lt.patch.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>17</java.version>
