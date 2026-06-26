@@ -14,7 +14,6 @@ on:
   push:
     branches:
       - lt-reports
-      - TE-10262-v2   # TEMP: lets the build run on the fix branch; remove before merge
   workflow_dispatch: {}
 
 jobs:
@@ -65,12 +64,11 @@ jobs:
 
       # Deploy the fatjar to GitHub Packages under a fixed coordinate. deploy-file
       # is used (instead of a plain deploy) so the karate-parent release version
-      # (1.5.x, used for Maven Central) is never touched.
-      #
-      # TEMP: publishing is disabled (if: false) while the build is verified on
-      # TE-10262-v2. Remove the `if: ${{ false }}` line to re-enable before merge.
+      # (1.5.x, used for Maven Central) is never touched. Only runs on lt-reports
+      # (not workflow_dispatch from other branches) so the package is published
+      # solely from merges into lt-reports.
       - name: publish to GitHub Packages
-        if: ${{ false }}
+        if: github.ref == 'refs/heads/lt-reports'
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
