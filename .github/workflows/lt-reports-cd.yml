@@ -2,13 +2,17 @@ name: lt-reports-cd
 
 # Publishes the Karate report-integration fatjar to GitHub Packages on every
 # merge into lt-reports. The post-processing service (LambdatestIncPrivate/
-# hyperexecute-postprocessing-service) downloads it from a fixed coordinate at
-# Docker build time, so there is nothing to version-bump or rename by hand:
-# every merge overwrites the same coordinate, mirroring how the extent report
-# jar is published (extentnativereports-1.10-stage).
+# hyperexecute-postprocessing-service) downloads it from this coordinate at
+# Docker build time.
 #
-#   coordinate: com.lambdatest:karate-reports:lt-reports
-#   url:        https://maven.pkg.github.com/LambdaTest/karate/com/lambdatest/karate-reports/lt-reports/karate-reports-lt-reports.jar
+# GitHub Packages rejects re-publishing an existing version (HTTP 409 Conflict),
+# so the publish version is NOT fixed: it is ${project.version}.${lt.patch.version}
+# where project.version tracks upstream karate (1.5.3) and lt.patch.version is a
+# LambdaTest-fork counter in the root pom that must be bumped on each republish.
+# The downstream consumer must reference the bumped version after each publish.
+#
+#   coordinate: com.lambdatest:karate-reports:<karate.version>.<lt.patch.version>  (e.g. 1.5.3.1)
+#   url:        https://maven.pkg.github.com/LambdaTest/karate/com/lambdatest/karate-reports/1.5.3.1/karate-reports-1.5.3.1.jar
 
 on:
   push:
@@ -62,11 +66,14 @@ jobs:
           test -f "${FATJAR}" || { echo "fatjar not found at ${FATJAR}"; ls -lh karate-core/target; exit 1; }
           ls -lh "${FATJAR}"
 
-      # Deploy the fatjar to GitHub Packages under a fixed coordinate. deploy-file
-      # is used (instead of a plain deploy) so the karate-parent release version
-      # (1.5.x, used for Maven Central) is never touched. Only runs on lt-reports
-      # (not workflow_dispatch from other branches) so the package is published
-      # solely from merges into lt-reports.
+      # Deploy the fatjar to GitHub Packages. deploy-file is used (instead of a
+      # plain deploy) so the karate-parent release version (1.5.x, used for Maven
+      # Central) is never touched. The publish version is the upstream karate
+      # version with the LambdaTest-fork patch appended (project.version.lt.patch.version,
+      # e.g. 1.5.3.1); bump lt.patch.version in the root pom to republish, since
+      # GitHub Packages rejects overwriting an existing version (HTTP 409). Only
+      # runs on lt-reports (not workflow_dispatch from other branches) so the
+      # package is published solely from merges into lt-reports.
       - name: publish to GitHub Packages
         if: github.ref == 'refs/heads/lt-reports'
         env:
@@ -74,13 +81,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           KARATE_VERSION="$(mvn -q -DforceStdout -f karate-core/pom.xml help:evaluate -Dexpression=project.version)"
+          LT_PATCH_VERSION="$(mvn -q -DforceStdout -f karate-core/pom.xml help:evaluate -Dexpression=lt.patch.version)"
+          PUBLISH_VERSION="${KARATE_VERSION}.${LT_PATCH_VERSION}"
+          echo "Publishing karate-reports version: ${PUBLISH_VERSION}"
           FATJAR="karate-core/target/karate-${KARATE_VERSION}.jar"
           mvn -B -ntp deploy:deploy-file \
             --settings .github/settings.xml \
             -Dfile="${FATJAR}" \
             -DgroupId=com.lambdatest \
             -DartifactId=karate-reports \
-            -Dversion=lt-reports \
+            -Dversion="${PUBLISH_VERSION}" \
             -Dpackaging=jar \
             -DrepositoryId=github \
             -Durl=https://maven.pkg.github.com/LambdaTest/karate
