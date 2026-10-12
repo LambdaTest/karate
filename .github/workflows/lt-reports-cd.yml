@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - name: git checkout
@@ -62,6 +62,25 @@ jobs:
 
       # deploy-file (not a plain deploy) keeps the karate-parent release version
       # untouched. Guarded to lt-reports so only merges publish, never dispatch.
+      # Release asset on this public repo: consumers download it without a token, which
+      # GitHub Packages Maven never allows (and it rejects App tokens).
+      - name: publish release asset
+        if: github.ref == 'refs/heads/lt-reports'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          KARATE_VERSION="$(mvn -q -DforceStdout -f karate-core/pom.xml help:evaluate -Dexpression=project.version)"
+          LT_PATCH_VERSION="$(mvn -q -DforceStdout -f karate-core/pom.xml help:evaluate -Dexpression=lt.patch.version)"
+          PUBLISH_VERSION="${KARATE_VERSION}.${LT_PATCH_VERSION}"
+          ASSET="karate-core/target/karate-reports-${PUBLISH_VERSION}.jar"
+          cp "karate-core/target/karate-${KARATE_VERSION}.jar" "${ASSET}"
+          if gh release view "v${PUBLISH_VERSION}" >/dev/null 2>&1; then
+            echo "release v${PUBLISH_VERSION} already exists"
+          else
+            gh release create "v${PUBLISH_VERSION}" "${ASSET}" --target "${GITHUB_SHA}" \
+              --title "karate-reports ${PUBLISH_VERSION}" --notes "karate report fatjar ${PUBLISH_VERSION}"
+          fi
+
       - name: publish to GitHub Packages
         if: github.ref == 'refs/heads/lt-reports'
         env:
