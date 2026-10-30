@@ -39,6 +39,12 @@
                 <artifactId>jackson-annotations</artifactId>
                 <version>2.18.11</version>
             </dependency>
+            <!-- thymeleaf 3.1.2 pulls ognl 3.3.4 (CVE-2026-113730); karate's KarateStandardDialect evaluates expressions itself, not with OGNL -->
+            <dependency>
+                <groupId>ognl</groupId>
+                <artifactId>ognl</artifactId>
+                <version>3.4.13</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
